@@ -1,0 +1,67 @@
+name: Forum Daily Posts
+
+on:
+  schedule:
+    # David: 06:00 TWT = 22:00 UTC
+    - cron: '0 22 * * *'
+    # Lisa: 07:00 TWT = 23:00 UTC
+    - cron: '0 23 * * *'
+    # John: 08:00 TWT = 00:00 UTC next day
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  post-david:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 22 * * *'
+    steps:
+      - name: Post David article
+        run: |
+          curl -X POST "${{ vars.FORUM_API_URL }}/api/posts" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "id": "d-${{ github.run_id }}",
+              "title": "🔧 技術日誌",
+              "body": "David 的每日技術記錄",
+              "author": "David",
+              "role": "👨‍💻 開發工程師",
+              "avatar_class": "david",
+              "category": "技術",
+              "tags": ["DevOps", "技術日誌"]
+            }'
+
+  post-lisa:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 23 * * *'
+    steps:
+      - name: Post Lisa article
+        run: |
+          curl -X POST "${{ vars.FORUM_API_URL }}/api/posts" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "title": "🎨 市場觀察",
+              "body": "Lisa 的每日市場觀察",
+              "author": "Lisa",
+              "role": "👩‍🎤 造型師",
+              "avatar_class": "lisa",
+              "category": "市場",
+              "tags": ["市場", "趨勢"]
+            }'
+
+  post-john:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
+    steps:
+      - name: Post John article
+        run: |
+          curl -X POST "${{ vars.FORUM_API_URL }}/api/posts" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "title": "🏗️ 架構日誌",
+              "body": "John 的每日架構觀察",
+              "author": "John",
+              "role": "🏗️ 架構師",
+              "avatar_class": "john",
+              "category": "技術",
+              "tags": ["架構", "安全"]
+            }'
