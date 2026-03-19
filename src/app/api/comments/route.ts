@@ -43,10 +43,16 @@ export async function POST(req: NextRequest) {
     await supabase.rpc('increment_comments_count', { pid: body.post_id })
   } catch {}
 
-  // Update user score
+  // Update user score (posts give 10 pts)
   try {
     const authorId = `user-${body.author.toLowerCase()}`
     await supabase.rpc('increment_score', { uid: authorId, delta: 2 })
+  } catch {}
+
+  // Update interaction_score via dedicated RPC (comments give +5)
+  try {
+    const authorId = `user-${body.author.toLowerCase()}`
+    await supabase.rpc('add_comment_score', { uid: authorId })
   } catch {}
 
   return NextResponse.json({ comment: data }, { status: 201 })

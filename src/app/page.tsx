@@ -25,13 +25,25 @@ const ss = (k: string, v: unknown) => {
 interface Post {
   id: string; title: string; body: string; author: string; role: string
   avatar_class: string; category: string; tags: string[]
-  likes_count: number; comments_count: number; is_for_ryan: boolean; attachments: string[]; created_at: string
+  likes_count: number; comments_count: number; votes_count: number
+  is_for_ryan: boolean; attachments: string[]; created_at: string
 }
 interface Comment {
   id: string; post_id: string; author: string; role: string; avatar_class: string; text: string; created_at: string
 }
 interface User {
-  user_id: string; name: string; role: string; avatar_class: string; score: number
+  user_id: string; name: string; role: string; avatar_class: string
+  score: number; interaction_score: number
+}
+
+// Get Monday of current week in YYYY-MM-DD format (local time)
+function getWeekStart(): string {
+  const now = new Date()
+  const day = now.getDay()
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+  const monday = new Date(now)
+  monday.setDate(diff)
+  return monday.toLocaleDateString('en-CA') // YYYY-MM-DD
 }
 
 function fmtTime(iso: string) {
@@ -53,7 +65,10 @@ export default function ForumHome() {
   const [userId, setUserId] = useState('')
   const [liked, setLiked] = useState<string[]>([])
   const [bookmarked, setBookmarked] = useState<string[]>([])
+  const [voted, setVoted] = useState<Record<string, boolean>>({})
+  const [votesCount, setVotesCount] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const weekStart = getWeekStart()
 
   // Post modal
   const [showPost, setShowPost] = useState(false)
@@ -82,8 +97,25 @@ export default function ForumHome() {
       ])
       setLiked(lk.liked_posts || [])
       setBookmarked(bm.bookmarks?.map((b: { post_id: string }) => b.post_id) || [])
+
+      // Load vote states for all posts this week
+      const allPosts = await fetch('/api/posts').then(r => r.json())
+      const postList: Post[] = allPosts.posts || []
+      const voteStates: Record<string, boolean> = {}
+      const voteCounts: Record<string, number> = {}
+      await Promise.all(
+        postList.map(async (p) => {
+          try {
+            const vr = await fetch(`/api/votes?post_id=${p.id}&week_start=${weekStart}&user_id=${uid}`).then(r => r.json())
+            voteStates[p.id] = vr.voted || false
+            voteCounts[p.id] = vr.count || 0
+          } catch {}
+        })
+      )
+      setVoted(voteStates)
+      setVotesCount(voteCounts)
     } catch {}
-  }, [])
+  }, [weekStart])
 
   // Initial data load
   useEffect(() => {
@@ -116,6 +148,18 @@ export default function ForumHome() {
     }).then(r => r.json())
     setPosts(posts.map(p => p.id === id ? { ...p, likes_count: res.count } : p))
     setLiked(res.liked ? [...liked, id] : liked.filter(l => l !== id))
+  }
+
+  const toggleVote = async (id: string) => {
+    if (!userId) return
+    const res = await fetch('/api/votes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_id: id, week_start: weekStart, user_id: userId })
+    }).then(r => r.json())
+    setVoted(prev => ({ ...prev, [id]: res.voted }))
+    setVotesCount(prev => ({ ...prev, [id]: res.count }))
+    setPosts(posts.map(p => p.id === id ? { ...p, votes_count: res.count } : p))
   }
 
   const toggleBM = async (id: string) => {
@@ -166,7 +210,8 @@ export default function ForumHome() {
 
   const removeAttachment = (url: string) => setAttachments(prev => prev.filter(u => u !== url))
 
-  const topUsers = [...users].sort((a, b) => b.score - a.score).slice(0, 5)
+  // Sort users by interaction_score for the leaderboard
+  const topUsers = [...users].sort((a, b) => (b.interaction_score || 0) - (a.interaction_score || 0)).slice(0, 5)
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -222,7 +267,7 @@ export default function ForumHome() {
             <div key={p.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '16px', marginBottom: '12px', border: '1px solid #334155' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '16px' }}>{AVATARS[p.avatar_class as keyof typeof AVATARS] || '👤'}</span>
                     <span style={{ fontWeight: 600, fontSize: '13px' }}>{p.author}</span>
                     <span style={{ fontSize: '11px', color: '#64748b' }}>{p.role}</span>
@@ -234,15 +279,33 @@ export default function ForumHome() {
                     <h3 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 600 }}>{p.title}</h3>
                   </Link>
                   <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.body}</p>
+                  {/* Attachment thumbnails in card */}
+                  {p.attachments && p.attachments.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      {p.attachments.slice(0, 4).map((url, i) => (
+                        <div key={i} style={{ width: '56px', height: '56px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #334155' }}>
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ))}
+                      {p.attachments.length > 4 && (
+                        <div style={{ width: '56px', height: '56px', borderRadius: '6px', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#94a3b8' }}>
+                          +{p.attachments.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '16px', marginTop: '10px', borderTop: '1px solid #334155', paddingTop: '8px' }}>
+              <div style={{ display: 'flex', gap: '16px', marginTop: '10px', borderTop: '1px solid #334155', paddingTop: '8px', flexWrap: 'wrap' }}>
                 <button onClick={() => toggleLike(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: liked.includes(p.id) ? '#ef4444' : '#64748b', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {liked.includes(p.id) ? '❤️' : '🤍'} {p.likes_count}
                 </button>
-                <Link href={`/post/${p.id}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '13px' }}>
+                <Link href={`/post/${p.id}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   💬 {p.comments_count}
                 </Link>
+                <button onClick={() => toggleVote(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: voted[p.id] ? '#f97316' : '#64748b', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {voted[p.id] ? '🔥' : '🔥'} {votesCount[p.id] || 0}
+                </button>
                 <button onClick={() => toggleBM(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: bookmarked.includes(p.id) ? '#f59e0b' : '#64748b', fontSize: '13px' }}>
                   {bookmarked.includes(p.id) ? '📑' : '📄'}
                 </button>
@@ -256,12 +319,17 @@ export default function ForumHome() {
           <div style={{ background: '#1e293b', borderRadius: '10px', padding: '14px', border: '1px solid #334155', position: 'sticky', top: '20px' }}>
             <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>🏆 排行榜</h4>
             {topUsers.map((u, i) => (
-              <div key={u.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #293548' }}>
-                <span style={{ fontSize: '12px' }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>{i + 1}.</span>{' '}
-                  <span>{AVATARS[u.avatar_class as keyof typeof AVATARS] || '👤'}{' '}{u.name}</span>
-                </span>
-                <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 700 }}>{u.score}</span>
+              <div key={u.user_id} style={{ padding: '4px 0', borderBottom: '1px solid #293548' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px' }}>
+                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>{i + 1}.</span>{' '}
+                    <span>{AVATARS[u.avatar_class as keyof typeof AVATARS] || '👤'}{' '}{u.name}</span>
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 700 }}>發文 {u.score}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginLeft: '16px' }}>
+                  互動積分：{u.interaction_score || 0}
+                </div>
               </div>
             ))}
           </div>

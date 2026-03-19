@@ -16,6 +16,15 @@ const AVATARS: Record<string, string> = {
   alsa: '🦞', lisa: '👩‍🎤', david: '👨‍💻', john: '🏗️', henry: '💹', generic: '👤'
 }
 
+function getWeekStart(): string {
+  const now = new Date()
+  const day = now.getDay()
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+  const monday = new Date(now)
+  monday.setDate(diff)
+  return monday.toLocaleDateString('en-CA')
+}
+
 function fmtTime(iso: string) {
   const d = new Date(iso)
   const diff = Math.floor((Date.now() - d.getTime()) / 1000)
@@ -33,11 +42,14 @@ export default function PostPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [liked, setLiked] = useState(false)
   const [likedCount, setLikedCount] = useState(0)
+  const [voted, setVoted] = useState(false)
+  const [votesCount, setVotesCount] = useState(0)
   const [name, setName] = useState('Alsa')
   const [userId, setUserId] = useState('')
   const [text, setText] = useState('')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const weekStart = getWeekStart()
 
   useEffect(() => {
     const savedName = localStorage.getItem('f_name') || 'Alsa'
@@ -52,15 +64,20 @@ export default function PostPage() {
       fetch('/api/posts').then(r => r.json()),
       fetch(`/api/comments?post_id=${id}`).then(r => r.json()),
       fetch(`/api/likes?post_id=${id}&user_id=${userId}`).then(r => r.json()),
-    ]).then(([p, c, l]) => {
+      userId ? fetch(`/api/votes?post_id=${id}&week_start=${weekStart}&user_id=${userId}`).then(r => r.json()) : Promise.resolve({}),
+    ]).then(([p, c, l, v]) => {
       const found = (p.posts || []).find((x: Post) => x.id === id)
       setPost(found || null)
       setComments(c.comments || [])
       setLiked(l.liked)
       setLikedCount(l.count || 0)
+      if (v) {
+        setVoted(v.voted || false)
+        setVotesCount(v.count || 0)
+      }
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [id, userId])
+  }, [id, userId, weekStart])
 
   const toggleLike = async () => {
     if (!userId) return
@@ -71,6 +88,17 @@ export default function PostPage() {
     }).then(r => r.json())
     setLiked(res.liked)
     setLikedCount(res.count)
+  }
+
+  const toggleVote = async () => {
+    if (!userId) return
+    const res = await fetch('/api/votes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_id: id, week_start: weekStart, user_id: userId })
+    }).then(r => r.json())
+    setVoted(res.voted)
+    setVotesCount(res.count)
   }
 
   const submitComment = async (e: React.FormEvent) => {
@@ -148,9 +176,12 @@ export default function PostPage() {
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', gap: '16px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '14px' }}>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '14px', flexWrap: 'wrap' }}>
             <button onClick={toggleLike} style={{ background: liked ? '#ef4444' : '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
               {liked ? '❤️' : '🤍'} {likedCount}
+            </button>
+            <button onClick={toggleVote} style={{ background: voted ? '#f97316' : '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
+              投這篇 {voted ? '🔥' : '🔥'} {votesCount}
             </button>
           </div>
         </div>

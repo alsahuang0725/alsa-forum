@@ -63,5 +63,6 @@ export interface User {
   role: string
   avatar_class: string
   score: number
+  interaction_score: number
   updated_at: string
 }
