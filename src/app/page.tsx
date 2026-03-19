@@ -25,7 +25,7 @@ const ss = (k: string, v: unknown) => {
 interface Post {
   id: string; title: string; body: string; author: string; role: string
   avatar_class: string; category: string; tags: string[]
-  likes_count: number; comments_count: number; is_for_ryan: boolean; created_at: string
+  likes_count: number; comments_count: number; is_for_ryan: boolean; attachments: string[]; created_at: string
 }
 interface Comment {
   id: string; post_id: string; author: string; role: string; avatar_class: string; text: string; created_at: string
@@ -61,6 +61,8 @@ export default function ForumHome() {
   const [newBody, setNewBody] = useState('')
   const [newCat, setNewCat] = useState('技術')
   const [newTags, setNewTags] = useState('')
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
 
   // User setup
   useEffect(() => {
@@ -135,15 +137,34 @@ export default function ForumHome() {
       body: JSON.stringify({
         id, title: newTitle, body: newBody, author: name, role: '🦞 總管',
         avatar_class: 'alsa', category: newCat, tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
-        is_for_ryan: newCat === '給Ryan'
+        is_for_ryan: newCat === '給Ryan', attachments,
       })
     }).then(r => r.json())
     if (res.post) {
       setPosts([res.post, ...posts])
       setShowPost(false)
-      setNewTitle(''); setNewBody(''); setNewTags('')
+      setNewTitle(''); setNewBody(''); setNewTags(''); setAttachments([])
     }
   }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploading(true)
+    const newUrls: string[] = []
+    for (const file of Array.from(files)) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.url) newUrls.push(data.url)
+    }
+    setAttachments(prev => [...prev, ...newUrls])
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  const removeAttachment = (url: string) => setAttachments(prev => prev.filter(u => u !== url))
 
   const topUsers = [...users].sort((a, b) => b.score - a.score).slice(0, 5)
 
@@ -264,6 +285,24 @@ export default function ForumHome() {
                 </select>
                 <input value={newTags} onChange={e => setNewTags(e.target.value)} placeholder="標籤（逗號分隔）"
                   style={{ flex: 1, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: '6px', padding: '6px 10px', fontSize: '13px' }} />
+              </div>
+              {/* Image attachments */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#334155', color: '#e2e8f0', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', marginBottom: attachments.length > 0 ? '8px' : '0' }}>
+                  📎 附加圖片
+                  <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple onChange={handleImageUpload} style={{ display: 'none' }} />
+                </label>
+                {uploading && <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '8px' }}>上傳中...</span>}
+                {attachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                    {attachments.map((url, i) => (
+                      <div key={i} style={{ position: 'relative', width: '72px', height: '72px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #334155' }}>
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button type="button" onClick={() => removeAttachment(url)} style={{ position: 'absolute', top: '2px', right: '2px', background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', color: '#fff', fontSize: '10px', lineHeight: '18px', textAlign: 'center' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowPost(false)} style={{ background: '#334155', color: '#e2e8f0', border: 'none', borderRadius: '6px', padding: '8px 16px', cursor: 'pointer' }}>取消</button>

@@ -30,6 +30,7 @@ export interface Post {
   likes_count: number
   comments_count: number
   is_for_ryan: boolean
+  attachments: string[]
   created_at: string
 }
 

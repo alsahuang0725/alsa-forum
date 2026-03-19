@@ -9,7 +9,7 @@ interface Comment {
 interface Post {
   id: string; title: string; body: string; author: string; role: string
   avatar_class: string; category: string; tags: string[]; likes_count: number; comments_count: number
-  is_for_ryan: boolean; created_at: string
+  is_for_ryan: boolean; attachments: string[]; created_at: string
 }
 
 const AVATARS: Record<string, string> = {
@@ -36,6 +36,7 @@ export default function PostPage() {
   const [name, setName] = useState('Alsa')
   const [userId, setUserId] = useState('')
   const [text, setText] = useState('')
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -136,6 +137,17 @@ export default function PostPage() {
               ))}
             </div>
           )}
+          {/* Attachments grid */}
+          {post.attachments && post.attachments.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px', marginTop: '20px' }}>
+              {post.attachments.map((url, i) => (
+                <img key={i} src={url} alt={`附件 ${i + 1}`} onClick={() => setLightboxUrl(url)}
+                  style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '8px', cursor: 'zoom-in', border: '2px solid #334155', transition: 'border-color 0.2s' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#f97316')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#334155')} />
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '16px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '14px' }}>
             <button onClick={toggleLike} style={{ background: liked ? '#ef4444' : '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
               {liked ? '❤️' : '🤍'} {likedCount}
@@ -171,6 +183,14 @@ export default function PostPage() {
           </div>
         </form>
       </div>
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, cursor: 'zoom-out' }} onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
+          <button onClick={() => setLightboxUrl(null)} style={{ position: 'absolute', top: '16px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer', width: '40px', height: '40px', borderRadius: '50%' }}>×</button>
+        </div>
+      )}
     </div>
   )
 }
