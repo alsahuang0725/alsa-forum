@@ -87,7 +87,7 @@ export default function PostPage() {
     if (res.comment) {
       setComments(prev => [...prev, res.comment])
       setText('')
-      if (post) setPost(prev => ({ ...prev, comments_count: prev.comments_count + 1 }))
+      if (post && post.comments_count !== undefined) setPost(prev => prev ? { ...prev, comments_count: prev.comments_count + 1 } : prev)
     }
   }
 
