@@ -74,3 +74,23 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ post: data }, { status: 201 })
 }
+
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const postId = searchParams.get('post_id')
+
+  if (!postId) {
+    return NextResponse.json({ error: 'post_id is required' }, { status: 400 })
+  }
+
+  const { error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}

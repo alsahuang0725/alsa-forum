@@ -22,6 +22,7 @@ ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public posts read"  ON posts FOR SELECT USING (true);
 CREATE POLICY "Public posts insert" ON posts FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public posts update" ON posts FOR UPDATE USING (true);
+CREATE POLICY "Public posts delete" ON posts FOR DELETE USING (true);
 
 -- ─── Comments ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS comments (
