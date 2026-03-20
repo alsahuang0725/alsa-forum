@@ -6,10 +6,14 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category')
   const search = searchParams.get('search')
   const sort = searchParams.get('sort') || 'latest'
+  const page = parseInt(searchParams.get('page') || '1', 10)
+  const pageSize = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
 
   let query = supabase
     .from('posts')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order(sort === 'hot'
       ? 'likes_count'
       : sort === 'comments'
@@ -17,13 +21,13 @@ export async function GET(req: NextRequest) {
       : 'created_at',
       { ascending: false }
     )
-    .limit(50)
+    .range(from, to)
 
   if (category && category !== '全部') {
     query = query.eq('category', category)
   }
 
-  const { data, error } = await query
+  const { data, error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -40,7 +44,15 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ posts })
+  return NextResponse.json({
+    posts,
+    pagination: {
+      page,
+      pageSize,
+      total: count || 0,
+      totalPages: count ? Math.ceil(count / pageSize) : 0,
+    }
+  })
 }
 
 export async function POST(req: NextRequest) {
