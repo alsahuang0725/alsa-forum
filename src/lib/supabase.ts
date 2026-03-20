@@ -30,7 +30,6 @@ export interface Post {
   likes_count: number
   comments_count: number
   is_for_ryan: boolean
-  attachments: string[]
   created_at: string
 }
 
@@ -63,6 +62,5 @@ export interface User {
   role: string
   avatar_class: string
   score: number
-  interaction_score: number
   updated_at: string
 }

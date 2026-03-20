@@ -58,7 +58,6 @@ export async function POST(req: NextRequest) {
       category: body.category || '技術',
       tags: body.tags || [],
       is_for_ryan: body.is_for_ryan || false,
-      attachments: body.attachments || [],
     })
     .select()
     .single()

@@ -9,20 +9,11 @@ interface Comment {
 interface Post {
   id: string; title: string; body: string; author: string; role: string
   avatar_class: string; category: string; tags: string[]; likes_count: number; comments_count: number
-  is_for_ryan: boolean; attachments: string[]; created_at: string
+  is_for_ryan: boolean; created_at: string
 }
 
 const AVATARS: Record<string, string> = {
   alsa: '🦞', lisa: '👩‍🎤', david: '👨‍💻', john: '🏗️', henry: '💹', generic: '👤'
-}
-
-function getWeekStart(): string {
-  const now = new Date()
-  const day = now.getDay()
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(now)
-  monday.setDate(diff)
-  return monday.toLocaleDateString('en-CA')
 }
 
 function fmtTime(iso: string) {
@@ -42,14 +33,10 @@ export default function PostPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [liked, setLiked] = useState(false)
   const [likedCount, setLikedCount] = useState(0)
-  const [voted, setVoted] = useState(false)
-  const [votesCount, setVotesCount] = useState(0)
   const [name, setName] = useState('Alsa')
   const [userId, setUserId] = useState('')
   const [text, setText] = useState('')
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const weekStart = getWeekStart()
 
   useEffect(() => {
     const savedName = localStorage.getItem('f_name') || 'Alsa'
@@ -64,20 +51,15 @@ export default function PostPage() {
       fetch('/api/posts').then(r => r.json()),
       fetch(`/api/comments?post_id=${id}`).then(r => r.json()),
       fetch(`/api/likes?post_id=${id}&user_id=${userId}`).then(r => r.json()),
-      userId ? fetch(`/api/votes?post_id=${id}&week_start=${weekStart}&user_id=${userId}`).then(r => r.json()) : Promise.resolve({}),
-    ]).then(([p, c, l, v]) => {
+    ]).then(([p, c, l]) => {
       const found = (p.posts || []).find((x: Post) => x.id === id)
       setPost(found || null)
       setComments(c.comments || [])
       setLiked(l.liked)
       setLikedCount(l.count || 0)
-      if (v) {
-        setVoted(v.voted || false)
-        setVotesCount(v.count || 0)
-      }
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [id, userId, weekStart])
+  }, [id, userId])
 
   const toggleLike = async () => {
     if (!userId) return
@@ -88,17 +70,6 @@ export default function PostPage() {
     }).then(r => r.json())
     setLiked(res.liked)
     setLikedCount(res.count)
-  }
-
-  const toggleVote = async () => {
-    if (!userId) return
-    const res = await fetch('/api/votes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_id: id, week_start: weekStart, user_id: userId })
-    }).then(r => r.json())
-    setVoted(res.voted)
-    setVotesCount(res.count)
   }
 
   const submitComment = async (e: React.FormEvent) => {
@@ -114,9 +85,9 @@ export default function PostPage() {
       })
     }).then(r => r.json())
     if (res.comment) {
-      setComments([...comments, res.comment])
+      setComments(prev => [...prev, res.comment])
       setText('')
-      if (post) setPost({ ...post, comments_count: post.comments_count + 1 })
+      if (post) setPost(prev => ({ ...prev, comments_count: prev.comments_count + 1 }))
     }
   }
 
@@ -165,23 +136,9 @@ export default function PostPage() {
               ))}
             </div>
           )}
-          {/* Attachments grid */}
-          {post.attachments && post.attachments.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px', marginTop: '20px' }}>
-              {post.attachments.map((url, i) => (
-                <img key={i} src={url} alt={`附件 ${i + 1}`} onClick={() => setLightboxUrl(url)}
-                  style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '8px', cursor: 'zoom-in', border: '2px solid #334155', transition: 'border-color 0.2s' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#f97316')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#334155')} />
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '16px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '14px' }}>
             <button onClick={toggleLike} style={{ background: liked ? '#ef4444' : '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
               {liked ? '❤️' : '🤍'} {likedCount}
-            </button>
-            <button onClick={toggleVote} style={{ background: voted ? '#f97316' : '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
-              投這篇 {voted ? '🔥' : '🔥'} {votesCount}
             </button>
           </div>
         </div>
@@ -214,14 +171,6 @@ export default function PostPage() {
           </div>
         </form>
       </div>
-
-      {/* Lightbox */}
-      {lightboxUrl && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, cursor: 'zoom-out' }} onClick={() => setLightboxUrl(null)}>
-          <img src={lightboxUrl} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
-          <button onClick={() => setLightboxUrl(null)} style={{ position: 'absolute', top: '16px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer', width: '40px', height: '40px', borderRadius: '50%' }}>×</button>
-        </div>
-      )}
     </div>
   )
 }

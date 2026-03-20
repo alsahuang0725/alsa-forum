@@ -1,0 +1,15 @@
+From alsahuang0725@github.com Sat Mar 20 2026 01:20 GMT+8
+Subject: [PATCH] David: Fix bugs #2, #3, #5, #6
+
+Files changed:
+- src/app/api/comments/route.ts
+- src/app/page.tsx
+- src/app/post/[id]/page.tsx
+
+Fixes:
+- #2 [Critical] toggleBM: bm parameter shadowing → renamed to prev
+- #3 [Major] comments_count not updating DB → fallback direct update added
+- #5 [Minor] No error UI when API fails → hasError state added
+- #6 [Major] Search Enter key not working → onKeyDown handler added
+- Also fixed: toggleLike closure bug (same pattern as toggleBM)
+- Also fixed: submitComment closure bug (using prev in setState)

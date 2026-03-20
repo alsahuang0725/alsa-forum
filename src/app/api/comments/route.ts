@@ -41,18 +41,22 @@ export async function POST(req: NextRequest) {
   // Update comments_count on post
   try {
     await supabase.rpc('increment_comments_count', { pid: body.post_id })
-  } catch {}
+  } catch {
+    // Fallback: sync from comments table count
+    const { count } = await supabase
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id', body.post_id)
+    await supabase
+      .from('posts')
+      .update({ comments_count: count ?? 0 })
+      .eq('id', body.post_id)
+  }
 
-  // Update user score (posts give 10 pts)
+  // Update user score
   try {
     const authorId = `user-${body.author.toLowerCase()}`
     await supabase.rpc('increment_score', { uid: authorId, delta: 2 })
-  } catch {}
-
-  // Update interaction_score via dedicated RPC (comments give +5)
-  try {
-    const authorId = `user-${body.author.toLowerCase()}`
-    await supabase.rpc('add_comment_score', { uid: authorId })
   } catch {}
 
   return NextResponse.json({ comment: data }, { status: 201 })
