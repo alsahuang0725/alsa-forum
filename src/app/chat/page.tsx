@@ -39,15 +39,17 @@ function escapeHtml(text: string) {
 
 function getRouteLabel(text: string) {
   if (!text) return 'Ryan→All'
-  if (text.startsWith('@Alsa ')) return 'Ryan→Alsa'
-  if (text.startsWith('@Elvi ')) return 'Ryan→Elvi'
+  const t = text.toLowerCase()
+  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return 'Ryan→Alsa'
+  if (t.startsWith('@elvi ')) return 'Ryan→Elvi'
   return 'Ryan→All'
 }
 
 function stripPrefix(text: string) {
   if (!text) return ''
-  if (text.startsWith('@Alsa ')) return text.slice(6)
-  if (text.startsWith('@Elvi ')) return text.slice(6)
+  const t = text.toLowerCase()
+  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return text.slice(text.indexOf(' ') + 1)
+  if (t.startsWith('@elvi ')) return text.slice(text.indexOf(' ') + 1)
   return text
 }
 
