@@ -1,13 +1,31 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 const POST_ID = 'chat-alsa-elvi-001'
-const API_BASE = 'https://alsa-forum.vercel.app/api'
+const FORUM_API = 'https://alsa-forum.vercel.app/api'
+const TEAM_STATE_API = `${FORUM_API}/team-state`
+
+interface ChatEntry {
+  author: string
+  text: string
+  timestamp: string
+}
+
+interface CommentEntry {
+  id: string
+  author: string
+  text: string
+  created_at: string
+}
 
 function fmtTime(iso: string) {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  try {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return iso
+  }
 }
 
 function fmtHHMMSS() {
@@ -17,13 +35,11 @@ function fmtHHMMSS() {
 }
 
 function escapeHtml(text: string) {
-  if (!text) return ''
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
 
 function getRouteLabel(text: string) {
@@ -40,46 +56,104 @@ function stripPrefix(text: string) {
   return text
 }
 
-interface Comment {
-  id: string; post_id: string; author: string; role: string
-  avatar_class: string; text: string; created_at: string
+// Matte dark color palette (eye-friendly)
+const colors = {
+  ryan: { bg: '#1e3a5f', border: '#2d5a8a', text: '#c8deff' },
+  alsa: { bg: '#1a3d2e', border: '#2a6048', text: '#a0e8c0' },
+  elvi: { bg: '#2d1f4a', border: '#4a2f7a', text: '#d4b8ff' },
+  system: { bg: '#1f2937', border: '#374151', text: '#9ca3af' },
 }
 
 export default function ChatPage() {
-  const [comments, setComments] = useState<Comment[]>([])
+  const [chatHistory, setChatHistory] = useState<ChatEntry[]>([])
+  const [comments, setComments] = useState<CommentEntry[]>([])
   const [status, setStatus] = useState<'loading'|'online'|'offline'>('loading')
   const [lastUpdated, setLastUpdated] = useState('--:--:--')
   const [sending, setSending] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const lastFetchRef = useRef<number>(0)
 
-  const fetchComments = async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const r = await fetch(`${API_BASE}/comments?post_id=${POST_ID}`)
-      const d = await r.json()
-      if (d.comments) {
-        setComments(d.comments)
-        setLastUpdated(fmtHHMMSS())
-        setStatus('online')
+      // Fetch both sources in parallel
+      const [teamRes, commentsRes] = await Promise.all([
+        fetch(TEAM_STATE_API),
+        fetch(`${FORUM_API}/comments?post_id=${POST_ID}`)
+      ])
+
+      const teamData = await teamRes.json()
+      const commentsData = await commentsRes.json()
+
+      // Build chat entries from team-state (authoritative source)
+      const teamEntries: ChatEntry[] = []
+      if (teamData.state?.chat_history) {
+        for (const entry of teamData.state.chat_history) {
+          teamEntries.push({
+            author: entry.author,
+            text: entry.text,
+            timestamp: entry.timestamp,
+          })
+        }
       }
+
+      // Also add comments from Forum that are from Ryan/Alsa/Elvi (real-time messages)
+      const forumEntries: ChatEntry[] = []
+      const knownAuthors = ['Ryan', 'Alsa', 'Elvi']
+      const seen = new Set<string>()
+      for (const c of (commentsData.comments || [])) {
+        if (knownAuthors.includes(c.author)) {
+          // Deduplicate by text+author+time
+          const key = `${c.author}:${c.text}:${c.created_at}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            forumEntries.push({
+              author: c.author,
+              text: c.text,
+              timestamp: fmtTime(c.created_at),
+            })
+          }
+        }
+      }
+
+      // Merge: team-state entries first (authoritative), then forum-only entries
+      // Deduplicate by author+text
+      const allEntries: ChatEntry[] = [...teamEntries]
+      for (const fe of forumEntries) {
+        const key = `${fe.author}:${fe.text}`
+        if (!teamEntries.some(e => `${e.author}:${e.text}` === key)) {
+          allEntries.push(fe)
+        }
+      }
+
+      // Sort by timestamp
+      allEntries.sort((a, b) => {
+        try { return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime() } catch { return 0 }
+      })
+
+      setChatHistory(allEntries)
+      setComments(commentsData.comments || [])
+      setLastUpdated(fmtHHMMSS())
+      setStatus('online')
+      lastFetchRef.current = Date.now()
     } catch {
       setStatus('offline')
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchComments() }, [])
+  useEffect(() => { fetchAll() }, [fetchAll])
 
   // Auto-refresh every 2 minutes
   useEffect(() => {
-    const t = setInterval(fetchComments, 2 * 60 * 1000)
+    const t = setInterval(fetchAll, 2 * 60 * 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [fetchAll])
 
-  // Scroll to bottom when comments change
+  // Scroll to bottom on new messages
   useEffect(() => {
     const el = chatRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [comments])
+  }, [chatHistory])
 
   const sendMsg = async () => {
     const text = inputRef.current?.value.trim()
@@ -89,12 +163,47 @@ export default function ChatPage() {
     setSending(true)
     try {
       const id = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
-      await fetch(`${API_BASE}/comments`, {
+
+      // 1. Post to Forum Comments
+      await fetch(`${FORUM_API}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, post_id: POST_ID, author: 'Ryan', role: '👤', avatar_class: 'ryan', text })
+        body: JSON.stringify({
+          id,
+          post_id: POST_ID,
+          author: 'Ryan',
+          role: '👤',
+          avatar_class: 'ryan',
+          text,
+        }),
       })
-      await fetchComments()
+
+      // 2. Update team-state with new chat entry
+      const newEntry: ChatEntry = {
+        author: 'Ryan',
+        text,
+        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' GMT+8',
+      }
+
+      const currentEntries = [...chatHistory]
+      // Don't duplicate if already in history
+      const key = `Ryan:${text}`
+      if (!currentEntries.some(e => `${e.author}:${e.text}` === key)) {
+        currentEntries.push(newEntry)
+      }
+
+      const statePayload = {
+        chat_history: currentEntries,
+        updated_at: new Date().toISOString(),
+      }
+
+      await fetch(TEAM_STATE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: statePayload, updated_by: 'Ryan' }),
+      })
+
+      await fetchAll()
     } catch {
       setStatus('offline')
     } finally {
@@ -117,21 +226,12 @@ export default function ChatPage() {
     }
   }
 
-  // Group consecutive messages
-  const rows: Array<{ c: Comment; isHead: boolean; isTail: boolean }> = []
-  comments.forEach((c, i) => {
-    const prev = comments[i - 1]
-    const next = comments[i + 1]
-    rows.push({ c, isHead: !prev || prev.author !== c.author, isTail: !next || next.author !== c.author })
-  })
-
   const bg = '#0b0f1a'
   const surface = '#111827'
-  const surface2 = '#1f2937'
   const border = '#374151'
-  const ryan = '#3b82f6'
-  const alsa = '#22c55e'
-  const elvi = '#a855f7'
+
+  // Render all entries
+  const entries = chatHistory
 
   return (
     <div style={{ minHeight: '100dvh', background: bg, color: '#e5e7eb', fontFamily: "'Segoe UI',system-ui,sans-serif", display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -143,78 +243,62 @@ export default function ChatPage() {
         <span style={{ marginLeft: 'auto', fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: status === 'online' ? '#10b981' : status === 'offline' ? '#ef4444' : '#6b7280', color: '#fff', fontWeight: 600 }}>
           {status === 'online' ? '🟢 在線' : status === 'offline' ? '🔴 離線' : '🔄 連線中'}
         </span>
-        <button onClick={fetchComments} style={{ background: surface2, border: `1px solid ${border}`, color: '#e5e7eb', fontSize: '12px', padding: '5px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
+        <button onClick={fetchAll} style={{ background: '#1f2937', border: `1px solid ${border}`, color: '#e5e7eb', fontSize: '12px', padding: '5px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>
           🔄 強制刷新
         </button>
       </header>
 
       {/* Chat messages */}
-      <div ref={chatRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '2px', background: 'radial-gradient(ellipse at 50% 0%, #1a2235 0%, #0b0f1a 70%)' }}>
-        {rows.length === 0 && (
+      <div ref={chatRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'radial-gradient(ellipse at 50% 0%, #1a2235 0%, #0b0f1a 70%)' }}>
+        {entries.length === 0 && (
           <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '80px', fontSize: '14px' }}>
             尚無訊息。開始對話吧！
           </div>
         )}
-        {rows.map(({ c, isHead, isTail }) => {
-          if (c.author === '__TEAM_STATE__') {
-            return (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', marginTop: '10px', opacity: 0.75 }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>📋</div>
-                <div style={{ maxWidth: '72%' }}>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '2px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '12px', color: '#9ca3af' }}>Compaction</span>
-                    <span style={{ fontSize: '10px', color: '#6b7280' }}>{fmtTime(c.created_at)}</span>
-                  </div>
-                  <div style={{ background: surface2, color: '#9ca3af', fontStyle: 'italic', borderRadius: '12px', border: '1px dashed #4b5563', padding: '8px 14px', fontSize: '12px', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {c.text}
-                  </div>
-                </div>
-              </div>
-            )
-          }
-
-          const isRyan = c.author === 'Ryan'
-          const isAlsa = c.author === 'Alsa'
-          const isElvi = c.author === 'Elvi'
-          const routeLabel = isRyan ? getRouteLabel(c.text) : ''
-          const displayText = isRyan ? stripPrefix(c.text) : c.text
-
-          const avatarBg = isRyan ? ryan : isAlsa ? '#15803d' : isElvi ? '#7e22ce' : '#4b5563'
-          const avatarEmoji = isRyan ? '👤' : isAlsa ? '🦞' : isElvi ? '🐞' : '👤'
-          const bubbleBg = isRyan ? (isHead && isTail ? 'linear-gradient(135deg,#1d4ed8,#2563eb)' : ryan)
-            : isAlsa ? (isHead && isTail ? 'linear-gradient(135deg,#166534,#15803d)' : alsa)
-            : isElvi ? (isHead && isTail ? 'linear-gradient(135deg,#6b21a8,#7e22ce)' : elvi)
-            : surface2
-
-          let bubbleRadius = '16px'
-          if (isRyan) {
-            if (isHead && isTail) bubbleRadius = '16px'
-            else if (isHead) bubbleRadius = '16px 16px 4px 16px'
-            else bubbleRadius = '4px 16px 16px 16px'
-          } else {
-            if (isHead && isTail) bubbleRadius = '16px'
-            else if (isHead) bubbleRadius = '16px 16px 16px 4px'
-            else bubbleRadius = '16px 4px 16px 16px'
-          }
-
-          const bubbleColor = '#fff'
-          const avatarBorder = isRyan ? '#60a5fa' : isAlsa ? '#4ade80' : isElvi ? '#c084fc' : 'transparent'
+        {entries.map((entry, i) => {
+          const isRyan = entry.author === 'Ryan'
+          const isAlsa = entry.author === 'Alsa'
+          const isElvi = entry.author === 'Elvi'
+          const c = isRyan ? colors.ryan : isAlsa ? colors.alsa : isElvi ? colors.elvi : colors.system
+          const routeLabel = isRyan ? getRouteLabel(entry.text) : ''
+          const displayText = isRyan ? stripPrefix(entry.text) : entry.text
 
           return (
-            <div key={c.id} style={{ display: 'flex', flexDirection: isRyan ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: '8px', marginTop: isHead ? '12px' : '2px' }}>
-              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: avatarBg, border: `2px solid ${avatarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', flexShrink: 0 }}>
-                {avatarEmoji}
+            <div key={i} style={{ display: 'flex', flexDirection: isRyan ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: '8px', marginTop: i === 0 || entries[i-1]?.author !== entry.author ? '10px' : '2px' }}>
+              {/* Avatar */}
+              <div style={{
+                width: '34px', height: '34px', borderRadius: '50%',
+                background: c.bg, border: `2px solid ${c.border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '17px', flexShrink: 0,
+              }}>
+                {isRyan ? '👤' : isAlsa ? '🦞' : isElvi ? '🐞' : '📋'}
               </div>
+
+              {/* Content */}
               <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', alignItems: isRyan ? 'flex-end' : 'flex-start', gap: '2px' }}>
-                {isHead && (
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', flexDirection: isRyan ? 'row-reverse' : 'row', padding: '0 4px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '12px' }}>{c.author}</span>
-                    {routeLabel && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: 'rgba(59,130,246,0.2)', color: '#93c5fd', fontWeight: 600 }}>{routeLabel}</span>}
-                    <span style={{ fontSize: '10px', color: '#6b7280' }}>{fmtTime(c.created_at)}</span>
-                  </div>
-                )}
-                <div style={{ background: bubbleBg, color: bubbleColor, borderRadius: bubbleRadius, padding: '8px 14px', fontSize: '14px', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {displayText}
+                {/* Meta row */}
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', flexDirection: isRyan ? 'row-reverse' : 'row', padding: '0 4px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '12px', color: c.text }}>{entry.author}</span>
+                  {routeLabel && (
+                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: 'rgba(59,130,246,0.15)', color: '#93c5fd', fontWeight: 600 }}>{routeLabel}</span>
+                  )}
+                  <span style={{ fontSize: '10px', color: '#6b7280' }}>{entry.timestamp}</span>
+                </div>
+                {/* Bubble */}
+                <div style={{
+                  background: c.bg,
+                  border: `1px solid ${c.border}`,
+                  borderRadius: '12px',
+                  padding: '8px 14px',
+                  fontSize: '14px',
+                  lineHeight: 1.55,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  color: c.text,
+                  maxWidth: '100%',
+                }}>
+                  {escapeHtml(displayText)}
                 </div>
               </div>
             </div>
@@ -236,13 +320,13 @@ export default function ChatPage() {
           <button
             onClick={sendMsg}
             disabled={sending}
-            style={{ background: ryan, color: '#fff', border: 'none', borderRadius: '12px', padding: '10px 22px', fontSize: '14px', fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.7 : 1, fontFamily: 'inherit', transition: 'opacity 0.15s, transform 0.1s' }}
+            style={{ background: '#1e3a5f', color: '#c8deff', border: '1px solid #2d5a8a', borderRadius: '12px', padding: '10px 22px', fontSize: '14px', fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.7 : 1, fontFamily: 'inherit' }}
           >
             {sending ? '傳送中...' : '傳送'}
           </button>
         </div>
         <div style={{ textAlign: 'center', fontSize: '11px', color: '#6b7280', marginTop: '6px', maxWidth: '800px', margin: '6px auto 0' }}>
-          每 2 分鐘自動刷新 · <span id="lastUpdated">最後更新: {lastUpdated}</span>
+          每 2 分鐘自動刷新 · <span>最後更新: {lastUpdated}</span>
         </div>
       </div>
     </div>
