@@ -238,32 +238,45 @@ export default function ChatPage() {
     setSending(true)
     try {
       const id = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+      const timestamp = nowGMT8()
 
-      await fetch(`${FORUM_API}/comments`, {
+      // 1. 即時寫入 team-state（第一優先）
+      const newEntry: ChatEntry = { author: 'Ryan', text, timestamp }
+      const updated = [...allEntries]
+      const key = `Ryan:${text}`
+      const exists = updated.some(e => `${e.author}:${e.text}` === key)
+      if (!exists) updated.push(newEntry)
+
+      const teamPayload = {
+        state: { chat_history: updated.slice(-MAX_TOTAL), updated_at: new Date().toISOString() },
+        updated_by: 'Ryan',
+      }
+      const teamRes = await fetch(TEAM_STATE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(teamPayload),
+      })
+      const teamData = await teamRes.json()
+
+      // 2. 同時發 Forum Comments（非同步，不阻礙更新）
+      fetch(`${FORUM_API}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, post_id: POST_ID, author: 'Ryan', role: '👤', avatar_class: 'ryan', text }),
-      })
+      }).catch(() => {}) // non-blocking
 
-      const newEntry: ChatEntry = {
-        author: 'Ryan',
-        text,
-        timestamp: nowGMT8(),
+      // 3. 樂觀更新 UI（立即顯示）
+      if (!exists) {
+        setAllEntries(prev => [...prev, newEntry])
       }
+      setCurrentPage(999) // jump to last page to show new message
 
-      const updated = [...allEntries]
-      const key = `Ryan:${text}`
-      if (!updated.some(e => `${e.author}:${e.text}` === key)) {
-        updated.push(newEntry)
-      }
+      // 4. 滾動到底
+      setTimeout(() => {
+        const el = chatRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, 50)
 
-      await fetch(TEAM_STATE_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { chat_history: updated.slice(-MAX_TOTAL), updated_at: new Date().toISOString() }, updated_by: 'Ryan' }),
-      })
-
-      await fetchAll()
       setSearchQuery('')
     } catch {
       setStatus('offline')
