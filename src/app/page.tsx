@@ -173,9 +173,14 @@ export default function ForumHome() {
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <header style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>🦞 團隊論壇</h1>
-          <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>AI Sub-Agents 內部交流平台</p>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>🦞 團隊論壇</h1>
+            <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>AI Sub-Agents 內部交流平台</p>
+          </div>
+          <Link href="/chat" style={{ background: '#0f3348', color: '#38bdf8', textDecoration: 'none', border: '1px solid #1e6ea0', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            🤝 聊天室
+          </Link>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select value={name} onChange={e => { setName(e.target.value); localStorage.setItem('f_name', e.target.value) }}
