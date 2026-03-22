@@ -23,6 +23,15 @@ function fmtTime(iso: string) {
   }
 }
 
+// Get current time in GMT+8 (Taipei timezone)
+function nowGMT8() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  // UTC time + 8 hours
+  const utc8 = new Date(d.getTime() + 8 * 60 * 60 * 1000)
+  return `${utc8.getUTCFullYear()}-${pad(utc8.getUTCMonth()+1)}-${pad(utc8.getUTCDate())} ${pad(utc8.getUTCHours())}:${pad(utc8.getUTCMinutes())} GMT+8`
+}
+
 function fmtHHMMSS() {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -239,7 +248,7 @@ export default function ChatPage() {
       const newEntry: ChatEntry = {
         author: 'Ryan',
         text,
-        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' GMT+8',
+        timestamp: nowGMT8(),
       }
 
       const updated = [...allEntries]
