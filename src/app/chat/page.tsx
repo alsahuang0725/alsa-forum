@@ -80,10 +80,10 @@ function matchesSearch(entry: ChatEntry, query: string): boolean {
 }
 
 const colors = {
-  ryan:   { bg: '#1e3a5f', border: '#2d5a8a', text: '#c8deff' },
-  alsa:   { bg: '#1a3d2e', border: '#2a6048', text: '#a0e8c0' },
-  elvi:   { bg: '#2d1f4a', border: '#4a2f7a', text: '#d4b8ff' },
-  system: { bg: '#1f2937', border: '#374151', text: '#9ca3af' },
+  ryan:   { bg: '#ffe4ec', border: '#ffb3c6', text: '#111111' },
+  alsa:   { bg: '#ffe4ec', border: '#ffb3c6', text: '#111111' },
+  elvi:   { bg: '#ffe4ec', border: '#ffb3c6', text: '#111111' },
+  system: { bg: '#f5f0f0', border: '#e0d0d0', text: '#333333' },
 }
 
 export default function ChatPage() {
