@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🦞 Alsa × Elvi × Ryan 專屬聊天室</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0f1a;
+    --surface: #111827;
+    --surface2: #1f2937;
+    --border: #374151;
+    --text: #e5e7eb;
+    --text-dim: #9ca3af;
+    --text-muted: #6b7280;
+    --ryan: #3b82f6;
+    --alsa: #22c55e;
+    --elvi: #a855f7;
+    --compact: #4b5563;
+    --accent: #f97316;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .header-icon { font-size: 22px; }
+  .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+  .header-status {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: #10b981;
+    color: #fff;
+    font-weight: 600;
+  }
+  .header-status.offline { background: #ef4444; }
+  .btn-refresh {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .btn-refresh:hover { background: #374151; }
+
+  /* Chat area */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    scroll-behavior: smooth;
+    background: radial-gradient(ellipse at 50% 0%, #1a2235 0%, var(--bg) 70%);
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    margin-top: 80px;
+    font-size: 14px;
+  }
+
+  /* Message groups */
+  .msg-group {
+    display: flex;
+    flex-direction: column;
+    margin-top: 12px;
+  }
+  .msg-group.compaction { margin-top: 8px; }
+
+  /* Message row */
+  .msg-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    animation: fadeIn 0.2s ease;
+  }
+  .msg-row.ryan { flex-direction: row-reverse; }
+  .msg-row.compaction { flex-direction: row; opacity: 0.75; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Avatar */
+  .avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+    border: 2px solid transparent;
+  }
+  .avatar.ryan-avatar { background: var(--ryan); border-color: #60a5fa; }
+  .avatar.alsa-avatar { background: #15803d; border-color: #4ade80; }
+  .avatar.elvi-avatar { background: #7e22ce; border-color: #c084fc; }
+  .avatar.compaction-avatar { background: var(--compact); border-color: #9ca3af; width: 28px; height: 28px; font-size: 13px; }
+
+  /* Bubble container */
+  .bubble-wrap {
+    max-width: 72%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .bubble-wrap.ryan-wrap { align-items: flex-end; }
+  .bubble-wrap.alsa-wrap { align-items: flex-start; }
+  .bubble-wrap.elvi-wrap { align-items: flex-start; }
+  .bubble-wrap.compaction-wrap { align-items: flex-start; }
+
+  /* Name + label row */
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .meta-row.ryan-meta { flex-direction: row-reverse; }
+  .sender-name { font-weight: 700; font-size: 12px; }
+  .route-label {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(59,130,246,0.2);
+    color: #93c5fd;
+    font-weight: 600;
+  }
+  .meta-time { font-size: 10px; color: var(--text-muted); }
+
+  /* Bubble */
+  .bubble {
+    padding: 8px 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  /* Ryan bubbles - blue */
+  .bubble.ryan-head {
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #fff;
+    border-radius: 16px 16px 4px 16px;
+  }
+  .bubble.ryan-mid {
+    background: var(--ryan);
+    color: #fff;
+    border-radius: 4px 16px 16px 16px;
+  }
+  .bubble.ryan-single {
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #fff;
+    border-radius: 16px;
+  }
+
+  /* Alsa bubbles - green */
+  .bubble.alsa-head {
+    background: linear-gradient(135deg, #166534, #15803d);
+    color: #fff;
+    border-radius: 16px 16px 16px 4px;
+  }
+  .bubble.alsa-mid {
+    background: var(--alsa);
+    color: #fff;
+    border-radius: 16px 4px 16px 16px;
+  }
+  .bubble.alsa-single {
+    background: linear-gradient(135deg, #166534, #15803d);
+    color: #fff;
+    border-radius: 16px;
+  }
+
+  /* Elvi bubbles - purple */
+  .bubble.elvi-head {
+    background: linear-gradient(135deg, #6b21a8, #7e22ce);
+    color: #fff;
+    border-radius: 16px 16px 16px 4px;
+  }
+  .bubble.elvi-mid {
+    background: var(--elvi);
+    color: #fff;
+    border-radius: 16px 4px 16px 16px;
+  }
+  .bubble.elvi-single {
+    background: linear-gradient(135deg, #6b21a8, #7e22ce);
+    color: #fff;
+    border-radius: 16px;
+  }
+
+  /* Compaction bubble */
+  .bubble.compaction {
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-style: italic;
+    border-radius: 12px;
+    border: 1px dashed #4b5563;
+    font-size: 12px;
+  }
+
+  /* Input area */
+  .input-area {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    flex-shrink: 0;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  #msgInput {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    max-height: 120px;
+    overflow-y: auto;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+  }
+  #msgInput:focus { border-color: var(--ryan); }
+  #msgInput::placeholder { color: var(--text-muted); }
+
+  .btn-send {
+    background: var(--ryan);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    font-family: inherit;
+  }
+  .btn-send:hover { background: #2563eb; transform: scale(1.02); }
+  .btn-send:active { transform: scale(0.98); }
+
+  .footer-info {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 600px) {
+    .header-title { font-size: 14px; }
+    .bubble-wrap { max-width: 85%; }
+    #chat { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="header-icon">💬</span>
+  <span class="header-title">🦞 Alsa × Elvi × Ryan 專屬聊天室</span>
+  <span id="statusBadge" class="header-status">🔄 連線中</span>
+  <button class="btn-refresh" onclick="manualRefresh()">🔄 強制刷新</button>
+</header>
+
+<div id="chat">
+  <div class="empty-state" id="emptyState">載入中...</div>
+</div>
+
+<div class="input-area">
+  <div class="input-row">
+    <textarea id="msgInput" rows="1" placeholder="說什麼... (@Alsa / @Elvi / 無人稱 = 兩者都說)"></textarea>
+    <button class="btn-send" onclick="sendMsg()">傳送</button>
+  </div>
+  <div class="footer-info">
+    <span id="footerInfo">每 2 分鐘自動刷新</span> · <span id="lastUpdated">最後更新: --:--:--</span>
+  </div>
+</div>
+
+<script>
+const POST_ID = 'chat-alsa-elvi-001';
+const API_BASE = 'https://alsa-forum.vercel.app/api';
+
+// Format timestamp
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtHHMMSS() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// Determine route label
+function getRouteLabel(text) {
+  if (!text) return 'Ryan→All';
+  if (text.startsWith('@Alsa ')) return 'Ryan→Alsa';
+  if (text.startsWith('@Elvi ')) return 'Ryan→Elvi';
+  return 'Ryan→All';
+}
+
+// Strip @mention prefix for display
+function stripPrefix(text) {
+  if (!text) return '';
+  if (text.startsWith('@Alsa ')) return text.slice(6);
+  if (text.startsWith('@Elvi ')) return text.slice(6);
+  return text;
+}
+
+// Group consecutive messages by same author
+function groupMessages(comments) {
+  const groups = [];
+  comments.forEach((c, i) => {
+    const prev = comments[i - 1];
+    const isHead = !prev || prev.author !== c.author;
+    const next = comments[i + 1];
+    const isTail = !next || next.author !== c.author;
+    groups.push({ comment: c, isHead, isTail });
+  });
+  return groups;
+}
+
+// Render all messages
+function render(comments) {
+  const chat = document.getElementById('chat');
+  const emptyState = document.getElementById('emptyState');
+
+  if (!comments || comments.length === 0) {
+    emptyState.style.display = 'block';
+    // Remove old messages but keep empty state
+    chat.querySelectorAll('.msg-group').forEach(el => el.remove());
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  const groups = groupMessages(comments);
+
+  // Build all HTML
+  let html = '';
+  groups.forEach(({ comment: c, isHead, isTail }) => {
+    if (c.author === '__TEAM_STATE__') {
+      // Compaction record
+      html += `
+      <div class="msg-group compaction">
+        <div class="msg-row compaction">
+          <div class="avatar compaction-avatar">📋</div>
+          <div class="bubble-wrap compaction-wrap">
+            <div class="meta-row">
+              <span class="sender-name">Compaction</span>
+              <span class="meta-time">${fmtTime(c.created_at)}</span>
+            </div>
+            <div class="bubble compaction">${escapeHtml(c.text)}</div>
+          </div>
+        </div>
+      </div>`;
+      return;
+    }
+
+    const isRyan = c.author === 'Ryan';
+    const isAlsa = c.author === 'Alsa';
+    const isElvi = c.author === 'Elvi';
+
+    let avatarClass = 'avatar ';
+    let bubbleClass = 'bubble ';
+    let wrapClass = 'bubble-wrap ';
+    let metaClass = 'meta-row ';
+    let senderName = c.author;
+    let emoji = '';
+    let routeLabel = '';
+
+    if (isRyan) {
+      avatarClass += 'ryan-avatar';
+      emoji = '👤';
+      bubbleClass += isHead && isTail ? 'ryan-single' : (isHead ? 'ryan-head' : 'ryan-mid');
+      wrapClass += 'ryan-wrap';
+      metaClass += 'ryan-meta';
+      routeLabel = getRouteLabel(c.text);
+    } else if (isAlsa) {
+      avatarClass += 'alsa-avatar';
+      emoji = '🦞';
+      bubbleClass += isHead && isTail ? 'alsa-single' : (isHead ? 'alsa-head' : 'alsa-mid');
+      wrapClass += 'alsa-wrap';
+    } else if (isElvi) {
+      avatarClass += 'elvi-avatar';
+      emoji = '🐞';
+      bubbleClass += isHead && isTail ? 'elvi-single' : (isHead ? 'elvi-head' : 'elvi-mid');
+      wrapClass += 'elvi-wrap';
+    }
+
+    const displayText = isRyan ? stripPrefix(c.text) : c.text;
+
+    if (isHead) {
+      html += `<div class="msg-group">`;
+    }
+
+    html += `
+      <div class="msg-row ${isRyan ? 'ryan' : ''}">
+        <div class="${avatarClass}">${emoji}</div>
+        <div class="${wrapClass}">
+          ${isHead ? `<div class="${metaClass}">
+            <span class="sender-name">${escapeHtml(senderName)}</span>
+            ${routeLabel ? `<span class="route-label">${routeLabel}</span>` : ''}
+            <span class="meta-time">${fmtTime(c.created_at)}</span>
+          </div>` : ''}
+          <div class="${bubbleClass}">${escapeHtml(displayText)}</div>
+        </div>
+      </div>`;
+
+    if (isTail) {
+      html += `</div>`;
+    }
+  });
+
+  // Replace messages
+  chat.querySelectorAll('.msg-group').forEach(el => el.remove());
+  chat.insertAdjacentHTML('beforeend', html);
+
+  // Scroll to bottom
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Fetch comments
+async function fetchComments() {
+  try {
+    const r = await fetch(`${API_BASE}/comments?post_id=${POST_ID}`);
+    const d = await r.json();
+    if (d.comments) {
+      render(d.comments);
+      document.getElementById('lastUpdated').textContent = `最後更新: ${fmtHHMMSS()}`;
+      document.getElementById('statusBadge').textContent = '🟢 在線';
+      document.getElementById('statusBadge').className = 'header-status';
+    }
+  } catch (e) {
+    document.getElementById('statusBadge').textContent = '🔴 離線';
+    document.getElementById('statusBadge').className = 'header-status offline';
+  }
+}
+
+// Send message
+async function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  // Optimistic: show sending state
+  const btn = document.querySelector('.btn-send');
+  btn.textContent = '傳送中...';
+  btn.disabled = true;
+
+  try {
+    const id = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    const res = await fetch(`${API_BASE}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        post_id: POST_ID,
+        author: 'Ryan',
+        role: '👤',
+        avatar_class: 'ryan',
+        text
+      })
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    // Re-fetch to get latest state
+    await fetchComments();
+  } catch (e) {
+    alert('傳送失敗: ' + e.message);
+  } finally {
+    btn.textContent = '傳送';
+    btn.disabled = false;
+  }
+}
+
+function manualRefresh() {
+  document.getElementById('statusBadge').textContent = '🔄 刷新中';
+  fetchComments();
+}
+
+// Auto-resize textarea
+const msgInput = document.getElementById('msgInput');
+msgInput.addEventListener('input', function () {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// Enter to send (Shift+Enter for newline)
+msgInput.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMsg();
+  }
+});
+
+// Initial load
+fetchComments();
+
+// Auto-refresh every 2 minutes
+setInterval(fetchComments, 2 * 60 * 1000);
+</script>
+</body>
+</html>
