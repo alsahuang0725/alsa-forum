@@ -40,6 +40,19 @@ ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public comments read"   ON comments FOR SELECT USING (true);
 CREATE POLICY "Public comments insert" ON comments FOR INSERT WITH CHECK (true);
 
+-- ─── Agent Status ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_status (
+  agent_id   TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL,
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE agent_status ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public agent_status read"   ON agent_status FOR SELECT USING (true);
+CREATE POLICY "Public agent_status insert" ON agent_status FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public agent_status update" ON agent_status FOR UPDATE USING (true);
+
 -- ─── Likes ─────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS likes (
   id         TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
