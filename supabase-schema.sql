@@ -124,3 +124,17 @@ BEGIN
   WHERE id = pid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ─── Team Session State (Alsa × Elvi 共享狀態) ───────────────────────────────
+CREATE TABLE IF NOT EXISTS team_session_state (
+  id          TEXT        PRIMARY KEY DEFAULT 'main',
+  state       JSONB       NOT NULL DEFAULT '{}',
+  updated_by  TEXT        NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE team_session_state ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read"  ON team_session_state FOR SELECT USING (true);
+CREATE POLICY "Public insert" ON team_session_state FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public update" ON team_session_state FOR UPDATE USING (true);
