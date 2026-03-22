@@ -49,16 +49,18 @@ function escapeHtml(text: string) {
 function getRouteLabel(text: string) {
   if (!text) return 'Ryan→All'
   const t = text.toLowerCase()
-  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return 'Ryan→Alsa'
+  // 順序重要：@elvi 要在 @alvi 之前（避免 alvi 被當成 alsa 子字串）
   if (t.startsWith('@elvi ')) return 'Ryan→Elvi'
+  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return 'Ryan→Alsa'
   return 'Ryan→All'
 }
 
 function stripPrefix(text: string) {
   if (!text) return ''
   const t = text.toLowerCase()
-  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return text.slice(text.indexOf(' ') + 1)
+  // 順序重要：@elvi 要在最前面檢查
   if (t.startsWith('@elvi ')) return text.slice(text.indexOf(' ') + 1)
+  if (t.startsWith('@alsa ') || t.startsWith('@alvi ')) return text.slice(text.indexOf(' ') + 1)
   return text
 }
 
