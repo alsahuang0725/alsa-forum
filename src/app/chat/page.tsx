@@ -186,17 +186,16 @@ export default function ChatPage() {
             : isElvi ? (isHead && isTail ? 'linear-gradient(135deg,#6b21a8,#7e22ce)' : elvi)
             : surface2
 
-          const bubbleRadius = (() => {
-            if (isRyan) {
-              if (isHead && isTail) return '16px'
-              if (isHead) return '16px 16px 4px 16px'
-              return '4px 16px 16px 16px'
-            } else {
-              if (isHead && isTail) return '16px'
-              if (isHead) return '16px 16px 16px 4px'
-              return '16px 4px 16px 16px'
-            }
-          })()
+          let bubbleRadius = '16px'
+          if (isRyan) {
+            if (isHead && isTail) bubbleRadius = '16px'
+            else if (isHead) bubbleRadius = '16px 16px 4px 16px'
+            else bubbleRadius = '4px 16px 16px 16px'
+          } else {
+            if (isHead && isTail) bubbleRadius = '16px'
+            else if (isHead) bubbleRadius = '16px 16px 16px 4px'
+            else bubbleRadius = '16px 4px 16px 16px'
+          }
 
           const bubbleColor = '#fff'
           const avatarBorder = isRyan ? '#60a5fa' : isAlsa ? '#4ade80' : isElvi ? '#c084fc' : 'transparent'
@@ -214,7 +213,7 @@ export default function ChatPage() {
                     <span style={{ fontSize: '10px', color: '#6b7280' }}>{fmtTime(c.created_at)}</span>
                   </div>
                 )}
-                <div style={{ background: bubbleBg, color: bubbleColor, borderRadius, padding: '8px 14px', fontSize: '14px', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                <div style={{ background: bubbleBg, color: bubbleColor, borderRadius: bubbleRadius, padding: '8px 14px', fontSize: '14px', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {displayText}
                 </div>
               </div>
